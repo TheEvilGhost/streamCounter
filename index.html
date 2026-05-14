@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stream Analyzer — ежедневные отчёты</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="styles.css?v=snapshot4" />
+</head>
+<body>
+  <div class="bg-orbs" aria-hidden="true">
+    <span class="orb orb-1"></span>
+    <span class="orb orb-2"></span>
+    <span class="orb orb-3"></span>
+  </div>
+  <div class="stars" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="brand">
+      <span class="brand-icon" aria-hidden="true">◇</span>
+      <div>
+        <h1>Stream Analyzer</h1>
+        <p class="tagline">Снимки накопленных просмотров · YouTube · Spotify · Яндекс Музыка</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <label class="currency-toggle">
+        <span>Валюта</span>
+        <select id="displayCurrency" aria-label="Валюта отображения">
+          <option value="USD">USD ($)</option>
+          <option value="RUB">RUB (₽)</option>
+        </select>
+      </label>
+      <label class="rate-field" id="rubRateWrap" hidden>
+        <span>Курс USD→RUB</span>
+        <input type="number" id="rubPerUsd" min="1" step="0.01" value="92" />
+      </label>
+      <button type="button" class="btn ghost" id="openRatesBtn">Ставки за стрим</button>
+      <button type="button" class="btn ghost" id="openHistoryBtn">История / откат</button>
+      <button type="button" class="btn ghost" id="exportBtn">Экспорт JSON</button>
+      <label class="btn ghost file-btn">
+        Импорт
+        <input type="file" id="importFile" accept="application/json" hidden />
+      </label>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel add-panel">
+      <h2>Новая запись</h2>
+      <p class="hint">Вводите <strong>текущие накопленные</strong> цифры с площадок на эту дату (не прирост за сутки). Между строками они не суммируются.</p>
+      <form id="entryForm" class="entry-form">
+        <div class="field">
+          <label for="entryDate">Дата</label>
+          <input type="date" id="entryDate" required />
+        </div>
+        <div class="field">
+          <label for="streamsYoutube">YouTube</label>
+          <input type="number" id="streamsYoutube" min="0" step="1" value="0" />
+        </div>
+        <div class="field">
+          <label for="streamsSpotify">Spotify</label>
+          <input type="number" id="streamsSpotify" min="0" step="1" value="0" />
+        </div>
+        <div class="field">
+          <label for="streamsYandex">Яндекс Музыка</label>
+          <input type="number" id="streamsYandex" min="0" step="1" value="0" />
+        </div>
+        <div class="field span-2">
+          <label for="entryNote">Заметка (необязательно)</label>
+          <input type="text" id="entryNote" maxlength="200" placeholder="релиз, промо, плейлист…" />
+        </div>
+        <div class="form-actions span-2">
+          <button type="submit" class="btn primary">Сохранить день</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel stats-panel">
+      <h2>Сводка</h2>
+      <div class="stat-cards" id="statCards"></div>
+      <p class="disclaimer">
+        Сводка и круговая диаграмма берут только <strong>последний по дате снимок</strong>. Деньги — оценка по ставкам (мин / среднее / макс за стрим). Реальные выплаты зависят от страны, подписки и доли правообладателя.
+      </p>
+    </section>
+
+    <section class="panel table-panel">
+      <div class="section-head">
+        <h2>Журнал по дням</h2>
+        <button type="button" class="btn text" id="sortToggle">Сначала новые</button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table" id="entriesTable">
+          <thead>
+            <tr>
+              <th>Дата</th>
+              <th>YouTube</th>
+              <th>Spotify</th>
+              <th>Яндекс</th>
+              <th>Σ в строке</th>
+              <th class="delta-head">Δ просмотров <span class="th-hint">к прошлому снимку</span></th>
+              <th>Доход (ср.)</th>
+              <th class="delta-head">Δ дохода <span class="th-hint">к прошлому снимку</span></th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="entriesBody"></tbody>
+        </table>
+      </div>
+      <p class="empty-hint" id="emptyHint">Пока нет записей — добавьте первый день выше.</p>
+    </section>
+
+    <section class="panel charts-panel">
+      <h2>Визуал</h2>
+      <div class="chart-grid">
+        <div class="chart-box">
+          <h3>Накопленные просмотры по датам</h3>
+          <canvas id="chartStreams" height="220"></canvas>
+        </div>
+        <div class="chart-box">
+          <h3>Доля площадок (последний снимок)</h3>
+          <canvas id="chartShare" height="220"></canvas>
+        </div>
+        <div class="chart-box wide">
+          <h3>Оценка дохода по каждому снимку (средняя ставка)</h3>
+          <canvas id="chartRevenue" height="240"></canvas>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <dialog class="modal" id="ratesModal">
+    <div class="modal-inner">
+      <h3>Ставки за 1 стрим (USD)</h3>
+      <p class="hint small">Ориентиры по умолчанию близки к публичным обзорам 2024–2025; при необходимости замените на свои из выплат.</p>
+      <div class="rates-grid" id="ratesEditor"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn primary" id="ratesResetBtn">Сбросить к умолчанию</button>
+        <button type="button" class="btn ghost" id="ratesCloseBtn">Закрыть</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog class="modal modal-wide" id="historyModal">
+    <div class="modal-inner">
+      <h3>История сохранений</h3>
+      <p class="hint small">
+        Перед каждым изменением данных делается снимок <strong>предыдущего</strong> состояния (до 80 шт.). То, что было до обновления страницы с этой версией сайта, в журнал не попало.
+      </p>
+      <div class="revision-list-wrap">
+        <ul class="revision-list" id="revisionList"></ul>
+        <p class="hint small" id="revisionEmpty" hidden>Записей истории пока нет — появятся после следующего сохранения, которое реально меняет данные.</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn danger" id="clearHistoryBtn">Очистить историю</button>
+        <button type="button" class="btn ghost" id="historyCloseBtn">Закрыть</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog class="modal" id="editModal">
+    <form id="editForm" class="modal-inner">
+      <h3>Редактировать день</h3>
+      <input type="hidden" id="editId" />
+      <div class="field">
+        <label for="editDate">Дата</label>
+        <input type="date" id="editDate" required />
+      </div>
+      <div class="field">
+        <label for="editYoutube">YouTube</label>
+        <input type="number" id="editYoutube" min="0" step="1" />
+      </div>
+      <div class="field">
+        <label for="editSpotify">Spotify</label>
+        <input type="number" id="editSpotify" min="0" step="1" />
+      </div>
+      <div class="field">
+        <label for="editYandex">Яндекс Музыка</label>
+        <input type="number" id="editYandex" min="0" step="1" />
+      </div>
+      <div class="field span-2">
+        <label for="editNote">Заметка</label>
+        <input type="text" id="editNote" maxlength="200" />
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn danger" id="deleteEntryBtn">Удалить день</button>
+        <button type="submit" class="btn primary">Сохранить</button>
+        <button type="button" class="btn ghost" id="editCancelBtn">Отмена</button>
+      </div>
+    </form>
+  </dialog>
+
+  <footer class="site-footer">
+    <p>Данные хранятся только в этом браузере (localStorage). Сделайте экспорт JSON как резервную копию.</p>
+    <p class="footer-tip">
+      Если сводка по-прежнему «складывает» все дни — обновите страницу с полным сбросом кэша (Chrome: Cmd+Shift+R / Ctrl+Shift+R). Откат по дням — кнопка «История / откат» в шапке (снимки с момента обновления этой версии).
+    </p>
+  </footer>
+
+  <script src="app.js?v=snapshot4" defer></script>
+</body>
+</html>
