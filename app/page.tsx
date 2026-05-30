@@ -9,7 +9,7 @@ export default function Home() {
         <a href="/index.html">Открыть Stream Analyzer</a>
       </p>
       <p style={{ color: "#666", fontSize: 14 }}>
-        На Vercel с паролем откройте главную страницу сайта — браузер запросит логин и пароль.
+        На Vercel откройте главную страницу сайта — откроется Stream Analyzer.
       </p>
     </main>
   );
