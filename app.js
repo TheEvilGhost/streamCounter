@@ -6,24 +6,39 @@
   const MAX_REVISIONS = 80;
 
   const PLATFORMS = [
-    { id: "youtube", label: "YouTube" },
-    { id: "spotify", label: "Spotify" },
-    { id: "yandex", label: "Яндекс Музыка" },
+    { id: "youtube", label: "YouTube", short: "YT", kind: "stream" },
+    { id: "spotify", label: "Spotify", short: "SP", kind: "stream" },
+    { id: "yandex", label: "Яндекс Музыка", short: "ЯМ", kind: "stream" },
+    { id: "apple", label: "Apple Music", short: "Apple", kind: "stream" },
+    { id: "soundcloud", label: "SoundCloud", short: "SC", kind: "stream" },
+    { id: "tiktok", label: "TikTok", short: "TT", kind: "publication", inputLabel: "TikTok (публикаций)" },
   ];
 
-  /** USD per stream — ориентиры; пользователь может изменить в «Ставки за стрим». */
+  /** USD за стрим или за публикацию (TikTok) — ориентиры; можно изменить в «Ставки». */
   const DEFAULT_RATES = {
     youtube: { min: 0.0006, avg: 0.0045, max: 0.012 },
     spotify: { min: 0.0012, avg: 0.0034, max: 0.009 },
     yandex: { min: 0.0005, avg: 0.0018, max: 0.0045 },
+    apple: { min: 0.004, avg: 0.0078, max: 0.012 },
+    soundcloud: { min: 0.0003, avg: 0.0025, max: 0.006 },
+    tiktok: { min: 0.02, avg: 0.08, max: 0.25 },
   };
 
   const CHART_COLORS = {
     youtube: "rgba(253, 230, 138, 0.85)",
     spotify: "rgba(196, 181, 253, 0.9)",
     yandex: "rgba(249, 168, 212, 0.9)",
+    apple: "rgba(252, 165, 165, 0.9)",
+    soundcloud: "rgba(251, 146, 60, 0.9)",
+    tiktok: "rgba(45, 212, 191, 0.9)",
     total: "rgba(165, 243, 252, 0.85)",
   };
+
+  function emptyStreams() {
+    const o = {};
+    for (const p of PLATFORMS) o[p.id] = 0;
+    return o;
+  }
 
   function loadState() {
     try {
@@ -86,11 +101,10 @@
     const id = typeof e.id === "string" && e.id ? e.id : crypto.randomUUID();
     const date = typeof e.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.date) ? e.date : null;
     if (!date) return null;
-    const streams = {
-      youtube: Math.max(0, Math.floor(Number(e.streams?.youtube) || 0)),
-      spotify: Math.max(0, Math.floor(Number(e.streams?.spotify) || 0)),
-      yandex: Math.max(0, Math.floor(Number(e.streams?.yandex) || 0)),
-    };
+    const streams = emptyStreams();
+    for (const p of PLATFORMS) {
+      streams[p.id] = Math.max(0, Math.floor(Number(e.streams?.[p.id]) || 0));
+    }
     const note = typeof e.note === "string" ? e.note.slice(0, 200) : "";
     return { id, date, streams, note };
   }
@@ -156,7 +170,9 @@
   }
 
   function totalStreams(entry) {
-    return entry.streams.youtube + entry.streams.spotify + entry.streams.yandex;
+    let sum = 0;
+    for (const p of PLATFORMS) sum += entry.streams[p.id] || 0;
+    return sum;
   }
 
   function revenueForEntry(entry, rates, tier) {
@@ -247,11 +263,8 @@
   }
 
   function snapshotFromEntry(entry, rates) {
-    const totals = {
-      youtube: entry.streams.youtube,
-      spotify: entry.streams.spotify,
-      yandex: entry.streams.yandex,
-    };
+    const totals = {};
+    for (const p of PLATFORMS) totals[p.id] = entry.streams[p.id] || 0;
     const streams = totalStreams(entry);
     return {
       entry,
@@ -263,15 +276,33 @@
     };
   }
 
+  function platformSummaryLine(totals) {
+    return PLATFORMS.map((p) => `${p.short} ${totals[p.id].toLocaleString("ru-RU")}`).join(" · ");
+  }
+
+  function readStreamsFromInputs(source) {
+    const streams = emptyStreams();
+    for (const p of PLATFORMS) {
+      const input = source[p.id];
+      if (input) streams[p.id] = input.value;
+    }
+    return streams;
+  }
+
+  function resetEntryFormNumbers() {
+    for (const p of PLATFORMS) {
+      const input = el.streamInputs[p.id];
+      if (input) input.value = "0";
+    }
+  }
+
   let state = loadState();
   let charts = { streams: null, share: null, revenue: null };
 
   const el = {
     entryForm: document.getElementById("entryForm"),
     entryDate: document.getElementById("entryDate"),
-    streamsYoutube: document.getElementById("streamsYoutube"),
-    streamsSpotify: document.getElementById("streamsSpotify"),
-    streamsYandex: document.getElementById("streamsYandex"),
+    streamInputs: {},
     entryNote: document.getElementById("entryNote"),
     statCards: document.getElementById("statCards"),
     entriesBody: document.getElementById("entriesBody"),
@@ -297,13 +328,33 @@
     editForm: document.getElementById("editForm"),
     editId: document.getElementById("editId"),
     editDate: document.getElementById("editDate"),
-    editYoutube: document.getElementById("editYoutube"),
-    editSpotify: document.getElementById("editSpotify"),
-    editYandex: document.getElementById("editYandex"),
+    editStreamInputs: {},
     editNote: document.getElementById("editNote"),
     editCancelBtn: document.getElementById("editCancelBtn"),
     deleteEntryBtn: document.getElementById("deleteEntryBtn"),
   };
+
+  for (const p of PLATFORMS) {
+    el.streamInputs[p.id] = document.getElementById(`streams-${p.id}`);
+    el.editStreamInputs[p.id] = document.getElementById(`edit-${p.id}`);
+  }
+
+  function renderTableHead() {
+    const row = document.getElementById("entriesHeadRow");
+    if (!row) return;
+    const platformTh = PLATFORMS.map((p) => {
+      const title = p.kind === "publication" ? `${p.label} (публ.)` : p.label;
+      return `<th title="${escapeHtml(p.label)}">${escapeHtml(p.short)}</th>`;
+    }).join("");
+    row.innerHTML = `
+      <th>Дата</th>
+      ${platformTh}
+      <th>Σ</th>
+      <th class="delta-head">Δ <span class="th-hint">к прошлому снимку</span></th>
+      <th>Доход (ср.)</th>
+      <th class="delta-head">Δ $ <span class="th-hint">к прошлому снимку</span></th>
+      <th></th>`;
+  }
 
   function renderRevisionList() {
     const list = loadRevisionList();
@@ -391,9 +442,9 @@
 
     const cards = [
       {
-        label: "Текущие просмотры (последний снимок)",
+        label: "Текущий снимок (стримы + публикации)",
         value: streams.toLocaleString("ru-RU"),
-        sub: `на ${onDate}: YT ${totals.youtube.toLocaleString("ru-RU")} · SP ${totals.spotify.toLocaleString("ru-RU")} · ЯМ ${totals.yandex.toLocaleString("ru-RU")}`,
+        sub: `на ${onDate}: ${platformSummaryLine(totals)}`,
         cls: "",
       },
       {
@@ -446,11 +497,12 @@
       const dStreams = prev ? totalStreams(e) - totalStreams(prev) : null;
       const dMoney = prev ? revenueForEntry(e, state.rates, "avg") - revenueForEntry(prev, state.rates, "avg") : null;
       const noteHtml = e.note ? `<span class="note" title="${escapeHtml(e.note)}">${escapeHtml(e.note)}</span>` : "";
+      const platformCells = PLATFORMS.map(
+        (p) => `<td>${(e.streams[p.id] || 0).toLocaleString("ru-RU")}</td>`
+      ).join("");
       tr.innerHTML = `
         <td>${formatDateRu(e.date)}${noteHtml}</td>
-        <td>${e.streams.youtube.toLocaleString("ru-RU")}</td>
-        <td>${e.streams.spotify.toLocaleString("ru-RU")}</td>
-        <td>${e.streams.yandex.toLocaleString("ru-RU")}</td>
+        ${platformCells}
         <td>${totalStreams(e).toLocaleString("ru-RU")}</td>
         <td class="delta-col">${formatDeltaStreamsHtml(dStreams)}</td>
         <td>${formatMoney(avgRev, state)}</td>
@@ -480,11 +532,7 @@
     const entry = normalizeEntry({
       id: crypto.randomUUID(),
       date: el.entryDate.value,
-      streams: {
-        youtube: el.streamsYoutube.value,
-        spotify: el.streamsSpotify.value,
-        yandex: el.streamsYandex.value,
-      },
+      streams: readStreamsFromInputs(el.streamInputs),
       note: el.entryNote.value.trim(),
     });
     if (!entry) return;
@@ -497,9 +545,7 @@
     saveState(state);
     el.entryForm.reset();
     initFormDefaults();
-    el.streamsYoutube.value = "0";
-    el.streamsSpotify.value = "0";
-    el.streamsYandex.value = "0";
+    resetEntryFormNumbers();
     refreshAll();
   });
 
@@ -508,9 +554,10 @@
     if (!e) return;
     el.editId.value = e.id;
     el.editDate.value = e.date;
-    el.editYoutube.value = e.streams.youtube;
-    el.editSpotify.value = e.streams.spotify;
-    el.editYandex.value = e.streams.yandex;
+    for (const p of PLATFORMS) {
+      const input = el.editStreamInputs[p.id];
+      if (input) input.value = e.streams[p.id] || 0;
+    }
     el.editNote.value = e.note || "";
     el.editModal.showModal();
   }
@@ -523,11 +570,7 @@
     const updated = normalizeEntry({
       id,
       date: el.editDate.value,
-      streams: {
-        youtube: el.editYoutube.value,
-        spotify: el.editSpotify.value,
-        yandex: el.editYandex.value,
-      },
+      streams: readStreamsFromInputs(el.editStreamInputs),
       note: el.editNote.value.trim(),
     });
     if (!updated) return;
@@ -582,9 +625,11 @@
     el.ratesEditor.innerHTML = "";
     for (const p of PLATFORMS) {
       const r = state.rates[p.id];
+      const unit = p.kind === "publication" ? "за публикацию" : "за стрим";
       const block = document.createElement("div");
       block.className = "rate-platform";
       block.innerHTML = `<strong>${escapeHtml(p.label)}</strong>
+        <span class="rate-unit-hint">${escapeHtml(unit)} · USD</span>
         <div class="rate-row">
           <label>Мин<input type="number" data-platform="${p.id}" data-tier="min" step="any" min="0" value="${r.min}" /></label>
           <label>Среднее<input type="number" data-platform="${p.id}" data-tier="avg" step="any" min="0" value="${r.avg}" /></label>
@@ -711,7 +756,12 @@
         type: "doughnut",
         data: {
           labels: PLATFORMS.map((p) => p.label),
-          datasets: [{ data: [1, 1, 1], backgroundColor: [CHART_COLORS.youtube, CHART_COLORS.spotify, CHART_COLORS.yandex] }],
+          datasets: [
+            {
+              data: PLATFORMS.map(() => 1),
+              backgroundColor: PLATFORMS.map((p) => CHART_COLORS[p.id]),
+            },
+          ],
         },
         options: { ...commonOpts },
       });
@@ -727,32 +777,14 @@
       type: "line",
       data: {
         labels,
-        datasets: [
-          {
-            label: "YouTube",
-            data: byDate.map((e) => e.streams.youtube),
-            borderColor: CHART_COLORS.youtube,
-            backgroundColor: "rgba(253, 230, 138, 0.08)",
-            tension: 0.35,
-            fill: true,
-          },
-          {
-            label: "Spotify",
-            data: byDate.map((e) => e.streams.spotify),
-            borderColor: CHART_COLORS.spotify,
-            backgroundColor: "rgba(196, 181, 253, 0.08)",
-            tension: 0.35,
-            fill: true,
-          },
-          {
-            label: "Яндекс",
-            data: byDate.map((e) => e.streams.yandex),
-            borderColor: CHART_COLORS.yandex,
-            backgroundColor: "rgba(249, 168, 212, 0.08)",
-            tension: 0.35,
-            fill: true,
-          },
-        ],
+        datasets: PLATFORMS.map((p) => ({
+          label: p.kind === "publication" ? `${p.label} (публ.)` : p.label,
+          data: byDate.map((e) => e.streams[p.id] || 0),
+          borderColor: CHART_COLORS[p.id],
+          backgroundColor: CHART_COLORS[p.id].replace(/0\.9\)$/, "0.08)"),
+          tension: 0.35,
+          fill: false,
+        })),
       },
       options: {
         ...commonOpts,
@@ -764,18 +796,16 @@
     });
 
     const last = latestEntry(state);
-    const shareTotals = last
-      ? { youtube: last.streams.youtube, spotify: last.streams.spotify, yandex: last.streams.yandex }
-      : { youtube: 0, spotify: 0, yandex: 0 };
-    const sumPl = shareTotals.youtube + shareTotals.spotify + shareTotals.yandex || 1;
+    const shareValues = last ? PLATFORMS.map((p) => last.streams[p.id] || 0) : PLATFORMS.map(() => 0);
+    const sumPl = shareValues.reduce((a, b) => a + b, 0) || 1;
     charts.share = new Chart(ctxSh, {
       type: "doughnut",
       data: {
         labels: PLATFORMS.map((p) => p.label),
         datasets: [
           {
-            data: [shareTotals.youtube, shareTotals.spotify, shareTotals.yandex],
-            backgroundColor: [CHART_COLORS.youtube, CHART_COLORS.spotify, CHART_COLORS.yandex],
+            data: shareValues,
+            backgroundColor: PLATFORMS.map((p) => CHART_COLORS[p.id]),
             borderColor: "rgba(8, 6, 15, 0.9)",
             borderWidth: 2,
           },
@@ -860,6 +890,7 @@
   }
 
   initFormDefaults();
+  renderTableHead();
   syncUIFromState();
   refreshAll();
 })();

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
-  <link rel="stylesheet" href="styles.css?v=snapshot4" />
+  <link rel="stylesheet" href="styles.css?v=snapshot5" />
 </head>
 <body>
   <div class="bg-orbs" aria-hidden="true">
@@ -23,7 +23,7 @@
       <span class="brand-icon" aria-hidden="true">◇</span>
       <div>
         <h1>Stream Analyzer</h1>
-        <p class="tagline">Снимки накопленных просмотров · YouTube · Spotify · Яндекс Музыка</p>
+        <p class="tagline">YouTube · Spotify · Яндекс · Apple Music · SoundCloud · TikTok</p>
       </div>
     </div>
     <div class="header-actions">
@@ -38,7 +38,7 @@
         <span>Курс USD→RUB</span>
         <input type="number" id="rubPerUsd" min="1" step="0.01" value="92" />
       </label>
-      <button type="button" class="btn ghost" id="openRatesBtn">Ставки за стрим</button>
+      <button type="button" class="btn ghost" id="openRatesBtn">Ставки</button>
       <button type="button" class="btn ghost" id="openHistoryBtn">История / откат</button>
       <button type="button" class="btn ghost" id="exportBtn">Экспорт JSON</button>
       <label class="btn ghost file-btn">
@@ -51,23 +51,35 @@
   <main class="layout">
     <section class="panel add-panel">
       <h2>Новая запись</h2>
-      <p class="hint">Вводите <strong>текущие накопленные</strong> цифры с площадок на эту дату (не прирост за сутки). Между строками они не суммируются.</p>
+      <p class="hint">Вводите <strong>текущие накопленные</strong> цифры с площадок на эту дату (не прирост за сутки). TikTok — число <strong>публикаций</strong>. Между строками они не суммируются.</p>
       <form id="entryForm" class="entry-form">
         <div class="field">
           <label for="entryDate">Дата</label>
           <input type="date" id="entryDate" required />
         </div>
         <div class="field">
-          <label for="streamsYoutube">YouTube</label>
-          <input type="number" id="streamsYoutube" min="0" step="1" value="0" />
+          <label for="streams-youtube">YouTube</label>
+          <input type="number" id="streams-youtube" min="0" step="1" value="0" />
         </div>
         <div class="field">
-          <label for="streamsSpotify">Spotify</label>
-          <input type="number" id="streamsSpotify" min="0" step="1" value="0" />
+          <label for="streams-spotify">Spotify</label>
+          <input type="number" id="streams-spotify" min="0" step="1" value="0" />
         </div>
         <div class="field">
-          <label for="streamsYandex">Яндекс Музыка</label>
-          <input type="number" id="streamsYandex" min="0" step="1" value="0" />
+          <label for="streams-yandex">Яндекс Музыка</label>
+          <input type="number" id="streams-yandex" min="0" step="1" value="0" />
+        </div>
+        <div class="field">
+          <label for="streams-apple">Apple Music</label>
+          <input type="number" id="streams-apple" min="0" step="1" value="0" />
+        </div>
+        <div class="field">
+          <label for="streams-soundcloud">SoundCloud</label>
+          <input type="number" id="streams-soundcloud" min="0" step="1" value="0" />
+        </div>
+        <div class="field">
+          <label for="streams-tiktok">TikTok (публикаций)</label>
+          <input type="number" id="streams-tiktok" min="0" step="1" value="0" />
         </div>
         <div class="field span-2">
           <label for="entryNote">Заметка (необязательно)</label>
@@ -83,7 +95,7 @@
       <h2>Сводка</h2>
       <div class="stat-cards" id="statCards"></div>
       <p class="disclaimer">
-        Сводка и круговая диаграмма берут только <strong>последний по дате снимок</strong>. Деньги — оценка по ставкам (мин / среднее / макс за стрим). Реальные выплаты зависят от страны, подписки и доли правообладателя.
+        Сводка и круговая диаграмма — только <strong>последний снимок</strong>. Доход: стримы × ставка за стрим, TikTok — публикации × ставка за публикацию (мин / сред / макс). Это оценка, не выплата с платформ.
       </p>
     </section>
 
@@ -95,17 +107,7 @@
       <div class="table-wrap">
         <table class="data-table" id="entriesTable">
           <thead>
-            <tr>
-              <th>Дата</th>
-              <th>YouTube</th>
-              <th>Spotify</th>
-              <th>Яндекс</th>
-              <th>Σ в строке</th>
-              <th class="delta-head">Δ просмотров <span class="th-hint">к прошлому снимку</span></th>
-              <th>Доход (ср.)</th>
-              <th class="delta-head">Δ дохода <span class="th-hint">к прошлому снимку</span></th>
-              <th></th>
-            </tr>
+            <tr id="entriesHeadRow"></tr>
           </thead>
           <tbody id="entriesBody"></tbody>
         </table>
@@ -116,9 +118,9 @@
     <section class="panel charts-panel">
       <h2>Визуал</h2>
       <div class="chart-grid">
-        <div class="chart-box">
-          <h3>Накопленные просмотры по датам</h3>
-          <canvas id="chartStreams" height="220"></canvas>
+        <div class="chart-box wide">
+          <h3>Накопленные значения по датам</h3>
+          <canvas id="chartStreams" height="260"></canvas>
         </div>
         <div class="chart-box">
           <h3>Доля площадок (последний снимок)</h3>
@@ -132,10 +134,10 @@
     </section>
   </main>
 
-  <dialog class="modal" id="ratesModal">
+  <dialog class="modal modal-wide" id="ratesModal">
     <div class="modal-inner">
-      <h3>Ставки за 1 стрим (USD)</h3>
-      <p class="hint small">Ориентиры по умолчанию близки к публичным обзорам 2024–2025; при необходимости замените на свои из выплат.</p>
+      <h3>Ставки роялти (USD)</h3>
+      <p class="hint small">Стриминг — за 1 прослушивание; TikTok — за 1 публикацию. Замените на свои цифры из выплат при необходимости.</p>
       <div class="rates-grid" id="ratesEditor"></div>
       <div class="modal-actions">
         <button type="button" class="btn primary" id="ratesResetBtn">Сбросить к умолчанию</button>
@@ -148,11 +150,11 @@
     <div class="modal-inner">
       <h3>История сохранений</h3>
       <p class="hint small">
-        Перед каждым изменением данных делается снимок <strong>предыдущего</strong> состояния (до 80 шт.). То, что было до обновления страницы с этой версией сайта, в журнал не попало.
+        Перед каждым изменением данных делается снимок <strong>предыдущего</strong> состояния (до 80 шт.).
       </p>
       <div class="revision-list-wrap">
         <ul class="revision-list" id="revisionList"></ul>
-        <p class="hint small" id="revisionEmpty" hidden>Записей истории пока нет — появятся после следующего сохранения, которое реально меняет данные.</p>
+        <p class="hint small" id="revisionEmpty" hidden>Записей истории пока нет — появятся после следующего сохранения.</p>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn danger" id="clearHistoryBtn">Очистить историю</button>
@@ -161,8 +163,8 @@
     </div>
   </dialog>
 
-  <dialog class="modal" id="editModal">
-    <form id="editForm" class="modal-inner">
+  <dialog class="modal modal-wide" id="editModal">
+    <form id="editForm" class="modal-inner edit-form-grid">
       <h3>Редактировать день</h3>
       <input type="hidden" id="editId" />
       <div class="field">
@@ -170,22 +172,34 @@
         <input type="date" id="editDate" required />
       </div>
       <div class="field">
-        <label for="editYoutube">YouTube</label>
-        <input type="number" id="editYoutube" min="0" step="1" />
+        <label for="edit-youtube">YouTube</label>
+        <input type="number" id="edit-youtube" min="0" step="1" />
       </div>
       <div class="field">
-        <label for="editSpotify">Spotify</label>
-        <input type="number" id="editSpotify" min="0" step="1" />
+        <label for="edit-spotify">Spotify</label>
+        <input type="number" id="edit-spotify" min="0" step="1" />
       </div>
       <div class="field">
-        <label for="editYandex">Яндекс Музыка</label>
-        <input type="number" id="editYandex" min="0" step="1" />
+        <label for="edit-yandex">Яндекс Музыка</label>
+        <input type="number" id="edit-yandex" min="0" step="1" />
+      </div>
+      <div class="field">
+        <label for="edit-apple">Apple Music</label>
+        <input type="number" id="edit-apple" min="0" step="1" />
+      </div>
+      <div class="field">
+        <label for="edit-soundcloud">SoundCloud</label>
+        <input type="number" id="edit-soundcloud" min="0" step="1" />
+      </div>
+      <div class="field">
+        <label for="edit-tiktok">TikTok (публикаций)</label>
+        <input type="number" id="edit-tiktok" min="0" step="1" />
       </div>
       <div class="field span-2">
         <label for="editNote">Заметка</label>
         <input type="text" id="editNote" maxlength="200" />
       </div>
-      <div class="modal-actions">
+      <div class="modal-actions span-2">
         <button type="button" class="btn danger" id="deleteEntryBtn">Удалить день</button>
         <button type="submit" class="btn primary">Сохранить</button>
         <button type="button" class="btn ghost" id="editCancelBtn">Отмена</button>
@@ -195,11 +209,9 @@
 
   <footer class="site-footer">
     <p>Данные хранятся только в этом браузере (localStorage). Сделайте экспорт JSON как резервную копию.</p>
-    <p class="footer-tip">
-      Если сводка по-прежнему «складывает» все дни — обновите страницу с полным сбросом кэша (Chrome: Cmd+Shift+R / Ctrl+Shift+R). Откат по дням — кнопка «История / откат» в шапке (снимки с момента обновления этой версии).
-    </p>
+    <p class="footer-tip">Откат по дням — «История / откат» в шапке.</p>
   </footer>
 
-  <script src="app.js?v=snapshot4" defer></script>
+  <script src="app.js?v=snapshot5" defer></script>
 </body>
 </html>
